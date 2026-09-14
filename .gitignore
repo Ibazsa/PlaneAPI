@@ -1,4 +1,5 @@
 # Ignore everything by default so only PlaneAPI.py is tracked
 *
+!PlaneAPI_command.py
 !PlaneAPI.py
 !.gitignore
