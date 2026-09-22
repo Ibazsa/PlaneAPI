@@ -5,21 +5,13 @@ from rich.text import Text
 
 
 console = Console()
-EMERGENCY_SQUAWKS = {
-    "7500": "Hijacking",
-    "7600": "Radio failure",
-    "7700": "General emergency",
+SEARCH_TYPES = {
+    "1" : "area_search",
+    "2" : "callsign",
+    "3" : "registration"
+
 }
-
-
-def input_validation_float(input_str):
-    try:
-        return float(input_str)
-    except ValueError:
-        print("Invalid input. Please enter a valid number.")
-        return None
-
-
+#for area search:
 def determine_location_type(location):
     parts = [part.strip() for part in location.split(",")]
     if len(parts) != 2:
@@ -38,9 +30,8 @@ def determine_location_type(location):
 
     return "city"
 
-
 def input_area_search():
-    loc = input("input coordinates, airport code, or city")
+    loc = input("input coordinates, airport code, or city\n")
     locType=determine_location_type(loc)
 
     if locType == "coord":
@@ -75,20 +66,13 @@ def input_area_search():
 
 
 
-
-def input_callsign_search():
-    callsign = input("callsign: ").strip()
-    if not callsign:
-        print("Invalid input. Please enter a valid callsign.")
-        exit()
-    return callsign
-
-
-def build_url(search_type, lat=None, lon=None, rad=None, callsign=None):
-    if search_type == "1":
+def build_url(search_type, lat=None, lon=None, rad=None, callsign=None, registration=None):
+    if search_type == "area_search":
         return f"https://opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{rad}"
-    elif search_type == "2":
+    elif search_type == "callsign":
         return f"https://opendata.adsb.fi/api/v2/callsign/{callsign}"
+    elif search_type == "registration":
+        return f"https://opendata.adsb.fi/api/v2/registration/{registration}"
     else:
         raise ValueError("Invalid search type")
 
@@ -141,17 +125,21 @@ def list_aircrafts(aircraft_list):
 if __name__ == "__main__":
 
     while True:
-        search_type = input(
-            "0. quit\n1. list aircrafts by area \n2. search flight\n"
+        search_type_inp= input(
+            "0. quit\n1. list aircrafts by area \n2. search by callsign\n3. search aircraft by registration number\n"
         ).strip()
-
-        if search_type == "1":
+        search_type = SEARCH_TYPES.get(search_type_inp)
+        if search_type == "area_search":
             lat, lon, rad = input_area_search()
             url = build_url(search_type, lat=lat, lon=lon, rad=rad)
-        elif search_type == "2":
-            callsign = input_callsign_search()
+        elif search_type == "callsign":
+            callsign = input("enter callsign:\n")
             url = build_url(search_type, callsign=callsign)
-        elif search_type == "0":
+        elif search_type=="registration":
+            reg_num = input("enter aircraft registration number:\n")
+            url = build_url(search_type, registration=reg_num)
+
+        elif search_type_inp == "0":
             break
         else:
             print("Invalid search type.")
