@@ -31,38 +31,43 @@ def determine_location_type(location):
     return "city"
 
 def input_area_search():
-    loc = input("input coordinates, airport code, or city\n")
-    locType=determine_location_type(loc)
+    loc = input("input coordinates, airport code, or city\n").strip()
+    loc_type = determine_location_type(loc)
 
-    if locType == "coord":
-        coordLoc = loc.split()
-        lat =coordLoc[0]
-        lon = coordLoc[1]
-        rad = input("search radius: ")
+    if loc_type == "coord":
+        coordinate_parts = [
+            part.strip()
+            for part in loc.replace(",", " ").split()
+        ]
+        lat, lon = coordinate_parts
+        rad = input("search radius: ").strip()
 
         return lat, lon, rad
-    elif locType == "airport_code":
+
+    if loc_type == "airport_code":
         response = requests.get(
             f"https://airportsapi.com/api/airports/{loc.upper()}",
             timeout=10,
         )
         response.raise_for_status()
         airport_data = response.json()["data"]["attributes"]
-        lat = airport_data["latitude"]
-        lon = airport_data["longitude"]
-        rad = input("search radius: ")
-        return lat, lon, rad
-    else:
-        response = requests.get(
-            "https://nominatim.openstreetmap.org/search",
-            params={"q": f"{loc}", "format": "json", "limit": 1},
-            headers={"User-Agent": "PlaneAPI-project"},
-            timeout=10,
-        )
-        results = response.json()
-        lat, lon = results[0]["lat"], results[0]["lon"]
-        rad = input("search radius: ")
-        return lat, lon, rad
+        rad = input("search radius: ").strip()
+        return airport_data["latitude"], airport_data["longitude"], rad
+
+    response = requests.get(
+        "https://nominatim.openstreetmap.org/search",
+        params={"q": loc, "format": "json", "limit": 1},
+        headers={"User-Agent": "PlaneAPI-project"},
+        timeout=10,
+    )
+    response.raise_for_status()
+    results = response.json()
+    if not results:
+        raise ValueError(f"Location not found: {loc}")
+
+    lat, lon = results[0]["lat"], results[0]["lon"]
+    rad = input("search radius: ").strip()
+    return lat, lon, rad
 
 
 
@@ -87,36 +92,64 @@ def request_flight_data(url):
         return []
 
 
+def get_flight_route(callsign):
+    if not callsign or callsign == "N/A":
+        return {}
+
+    try:
+        response = requests.get(
+            f"https://api.adsbdb.com/v0/callsign/{callsign}",
+            timeout=10,
+        )
+        response.raise_for_status()
+        return (
+            response.json()
+            .get("response", {})
+            .get("flightroute", {})
+            or {}
+        )
+    except requests.RequestException as error:
+
+        return {}
+
+
 def list_aircrafts(aircraft_list):
-    table = Table(title="Aircraft")         #create rows for the table
-    table.add_column("Flight")
-    table.add_column("Registration")
-    table.add_column("Type")
-    table.add_column("Altitude (ft)")
-    table.add_column("Speed (kn)")
-    table.add_column("Heading")
-    table.add_column("Squawk")
+    table = Table(title="Aircraft")
+    columns = (
+        "Flight",
+        "Registration",
+        "Type",
+        "Altitude (ft)",
+        "Speed (kn)",
+        #"Departure",
+        #"Destination",
+        "Heading",
+        "Squawk",
+    )
+    for column in columns:
+        table.add_column(column)
 
-    for aircraft in aircraft_list:      #loop through the aircraft list
-        flight_num = aircraft.get("flight") or "N/A"
-        if isinstance(flight_num, str):
-            flight_num = flight_num.strip()
+    for aircraft in aircraft_list:
+        flight_num = str(aircraft.get("flight") or "N/A").strip()
+        '''flight_route = get_flight_route(flight_num)
 
-        squawk = str(aircraft.get("squawk") or "N/A").strip()
+        origin = flight_route.get("origin") or {}
+        destination = flight_route.get("destination") or {}
+        departure = origin.get("icao_code") or "N/A"
+        arrival = destination.get("icao_code") or "N/A"'''
 
-        if squawk == "7500" or squawk == "7600" or squawk == "7700":
+        squawk = Text(str(aircraft.get("squawk") or "N/A").strip())
+        if squawk.plain in {"7500", "7600", "7700"}:
             squawk.stylize("bold red")
 
-
-        table.add_row(                  #add the rows to the table
-            str(flight_num),
-            str(aircraft.get("r", "N/A")),
-            str(aircraft.get("t", "N/A")),
-            str(aircraft.get("alt_baro", "N/A")),
-            str(aircraft.get("gs", "N/A")),
-            str(aircraft.get("true_heading", "N/A")),
-            squawk
-
+        table.add_row(
+            flight_num,
+            str(aircraft.get("r") or "N/A"),
+            str(aircraft.get("t") or "N/A"),
+            str(aircraft.get("alt_baro") or "N/A"),
+            str(aircraft.get("gs") or "N/A"),
+            str(aircraft.get("true_heading") or "N/A"),
+            squawk,
         )
 
     console.print(table)
@@ -130,7 +163,11 @@ if __name__ == "__main__":
         ).strip()
         search_type = SEARCH_TYPES.get(search_type_inp)
         if search_type == "area_search":
-            lat, lon, rad = input_area_search()
+            try:
+                lat, lon, rad = input_area_search()
+            except ValueError as error:
+                print(error)
+                continue
             url = build_url(search_type, lat=lat, lon=lon, rad=rad)
         elif search_type == "callsign":
             callsign = input("enter callsign:\n")
